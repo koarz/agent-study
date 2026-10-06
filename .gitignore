@@ -1,2 +1,12 @@
 .venv
 .env
+runs/
+projects/
+novels/
+**/rag/chroma/
+**/rag/manifest.json
+__pycache__/
+*.pyc
+
+image.py
+*.png
