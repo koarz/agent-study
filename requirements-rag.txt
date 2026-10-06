@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Optional, fully local retrieval stack for novel_agent.
+chromadb>=0.5,<2
+sentence-transformers>=3,<6
