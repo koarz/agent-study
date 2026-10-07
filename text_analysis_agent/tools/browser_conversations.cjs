@@ -1,6 +1,6 @@
 'use strict';
 
-// 在独立测试书库中验证会话隔离、重命名、草稿保留及精确引文高亮，不调用模型。
+// 在独立测试书库中验证会话隔离、删除、草稿保留及精确引文高亮，不调用模型。
 const {chromium} = require('../.cache/browser/node_modules/playwright');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -76,8 +76,54 @@ async function main() {
     await page.setViewportSize({width: 390, height: 844});
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({path: path.resolve(__dirname, '../artifacts/conversations-mobile.png'), fullPage: true});
+
+    // 取消删除不修改数据；删除非当前会话时保留当前记录和草稿。
+    await page.unroute('**/api/jobs?**');
+    await page.reload();
+    await page.locator('.user-message').waitFor();
+    const sessionsUrl = base + '/api/books/' + bookId + '/conversations';
+    const allSessions = await (await page.request.get(sessionsUrl)).json();
+    const second = allSessions.find(item => item.id !== first.id);
+    const secondJobs = await (await page.request.get(base + '/api/jobs?conversation_id=' + second.id)).json();
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByRole('button', {name: '删除会话 ' + first.title, exact: true}).click();
+    assert.equal((await (await page.request.get(sessionsUrl)).json()).length, 2);
+    await page.getByLabel('输入关于原文的问题').fill('删除时保留的草稿');
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', {name: '删除会话 ' + second.title, exact: true}).click();
+    await page.waitForFunction(() => document.querySelectorAll('.conversation-item').length === 1);
+    assert(page.url().endsWith('/chat/' + first.id));
+    assert.deepEqual(await page.locator('.user-message').allTextContents(), ['铜钥匙']);
+    assert.equal(await page.getByLabel('输入关于原文的问题').inputValue(), '删除时保留的草稿');
+    for (const task of secondJobs) assert.equal((await page.request.get(base + '/api/jobs/' + task.id)).status(), 404);
+
+    // 删除当前会话切换到剩余会话；删完后可以直接提问并自动创建新会话。
+    await page.getByRole('button', {name: '＋ 新会话', exact: true}).click();
+    await page.waitForFunction(() => document.querySelectorAll('.conversation-item').length === 2);
+    const third = (await (await page.request.get(sessionsUrl)).json()).find(item => item.id !== first.id);
+    await page.getByRole('button', {name: first.title, exact: true}).click();
+    await page.locator('.user-message').waitFor();
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', {name: '删除会话 ' + first.title, exact: true}).click();
+    await page.waitForURL('**/chat/' + third.id);
+    await page.waitForFunction(() => document.querySelectorAll('.conversation-item').length === 1);
+    assert.equal(await page.locator('.user-message').count(), 0);
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', {name: '删除会话 ' + third.title, exact: true}).click();
+    await page.waitForFunction(() => document.querySelectorAll('.conversation-item').length === 0);
+    assert(page.url().endsWith('/chat'));
+    assert.equal(await page.getByLabel('输入关于原文的问题').inputValue(), '');
+    assert.equal((await page.request.get(base + '/api/books/' + bookId)).status(), 200);
+    await page.getByLabel('问答检索方式').selectOption('extractive');
+    await page.getByLabel('输入关于原文的问题').fill('铜钥匙');
+    await page.getByLabel('输入关于原文的问题').press('Enter');
+    await page.locator('.citation').first().waitFor();
+    const fresh = await (await page.request.get(sessionsUrl)).json();
+    assert.equal(fresh.length, 1);
+    assert(![first.id, second.id, third.id].includes(fresh[0].id));
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.deepEqual(errors, []);
-    console.log('会话记录隔离、重命名、草稿切换、Unicode 偏移、重复引文定位与高亮自动滚动验证通过（零模型调用）。');
+    console.log('会话隔离、重命名、删除与记录清理、草稿切换、原文高亮及手机布局验证通过（零模型调用）。');
   } finally {await browser.close();}
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});

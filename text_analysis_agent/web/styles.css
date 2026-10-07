@@ -10,6 +10,7 @@ dialog{border:1px solid #dde7d1;border-radius:15px;padding:0;box-shadow:0 22px 9
 /* 完成索引的按钮显示确认状态，避免使用等待光标。 */
 .button.index-complete:disabled{background:#e9f0e4;border-color:#d6e3cb;color:#537246;cursor:default;opacity:1}
 /* 会话列表与原文引文定位。 */
+.conversation-row{display:flex;align-items:center;gap:6px}.conversation-row .conversation-item{flex:1;min-width:0}.side-card .conversation-row .button{width:auto;flex-shrink:0;margin:0;padding:6px}
 .conversation-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.conversation-heading h3{margin:0}.side-card .conversation-heading .button{width:auto;margin:0;padding:6px}.conversation-card>p{margin-top:12px}.conversation-list{display:grid;gap:5px;max-height:260px;overflow-y:auto}.conversation-item{border:1px solid transparent;background:transparent;border-radius:6px;padding:9px 10px;text-align:left;font-size:11px;overflow-wrap:anywhere}.conversation-item.active{background:#e3eddc;border-color:#d2dfc7;color:#4d6941}.quote-highlight{background:#ffeda6;color:inherit;padding:0;border-radius:2px;box-shadow:0 0 0 2px #ffeda6;scroll-margin-block:80px}.quote-highlight:focus{outline:2px solid #d4b35d;outline-offset:3px}.quote-location-note{font-size:12px;color:#7b866f;margin-bottom:18px}
 /* 模型用量卡片及可横向浏览的明细，长模型名不挤出页面。 */
 /* 设置页顶部确认实际重排配置，提供本地模型区域的定位入口。 */

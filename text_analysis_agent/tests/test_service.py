@@ -197,6 +197,61 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(set(ask.await_args.kwargs), {'sources'})
         self.assertEqual(len(self.client.get(f"/api/jobs?book_id={book}&conversation_id={session['id']}").json()), 2)
 
+    def test_delete_conversation_removes_only_its_records_and_survives_reload(self):
+        book = self.upload('删除测试', '第一章\n林舟打开了门。')
+        other_book = self.upload('另一部书', '独立的原文。')
+        library = self.app.state.library
+        sessions = [library.create_conversation(book) for _ in range(2)]
+        other_session = library.create_conversation(other_book)
+        tasks = []
+        for source, session in [(book, s) for s in sessions] + [(other_book, other_session)]:
+            task = library.create_job('ask', {'question': '旧问题', 'conversation_id': session['id']}, source)
+            library.update_job(task['id'], status='completed', result={'status': 'unclear', 'claims': []})
+            tasks.append(task)
+        index = library.create_job('index', {}, book)
+        library.update_job(index['id'], status='completed')
+        response = self.client.delete('/api/conversations/' + sessions[0]['id'])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['deleted_job_ids'], [tasks[0]['id']])
+        self.assertEqual(self.client.get('/api/jobs/' + tasks[0]['id']).status_code, 404)
+        self.assertEqual(self.client.post('/api/jobs/' + tasks[0]['id'] + '/retry').status_code, 404)
+        self.assertEqual([s['id'] for s in library.conversations(book)], [sessions[1]['id']])
+        self.assertEqual(library.job(tasks[1]['id'])['conversation_id'], sessions[1]['id'])
+        self.assertEqual(library.job(tasks[2]['id'])['conversation_id'], other_session['id'])
+        self.assertEqual(library.job(index['id'])['status'], 'completed')
+        reloaded = Library(library.directory)
+        self.assertEqual(len(reloaded.conversations(book)), 1)
+        self.assertEqual(self.client.delete('/api/conversations/' + sessions[1]['id']).status_code, 200)
+        self.assertEqual(library.conversations(book), [])
+        self.assertEqual(self.client.get('/api/books/' + book).status_code, 200)
+        with self.assertRaises(KeyError):
+            library.create_job('ask', {'question': '不能恢复删除的会话', 'conversation_id': sessions[0]['id']}, book)
+        self.assertEqual(library.jobs(book, kind='ask'), [])
+        fresh = library.create_conversation(book)
+        self.assertNotIn(fresh['id'], [s['id'] for s in sessions])
+
+    def test_delete_conversation_waits_for_queued_running_and_finishing_jobs(self):
+        book = self.upload('执行中会话', '明确的原文。')
+        library = self.app.state.library
+        session = library.create_conversation(book)
+        job = library.create_job('ask', {'question': '问题', 'conversation_id': session['id']}, book)
+        for status in ('queued', 'running'):
+            library.update_job(job['id'], status=status)
+            self.assertEqual(self.client.delete('/api/conversations/' + session['id']).status_code, 409)
+            self.assertEqual(library.job(job['id'])['status'], status)
+        library.update_job(job['id'], status='completed')
+        service = self.app.state.jobs
+        with service.submit_lock:
+            service.scheduled.add(job['id'])
+        try:
+            self.assertEqual(self.client.delete('/api/conversations/' + session['id']).status_code, 409)
+        finally:
+            with service.submit_lock:
+                service.scheduled.discard(job['id'])
+        library.update_book(book, archived=True)
+        self.assertEqual(self.client.delete('/api/conversations/' + session['id']).status_code, 200)
+        self.assertEqual(self.client.delete('/api/conversations/' + session['id']).status_code, 404)
+
     def test_validation_retry_reuses_current_original_without_reranking(self):
         book = self.upload('复核测试', '第一章\n林舟打开了门。')
         library = self.app.state.library

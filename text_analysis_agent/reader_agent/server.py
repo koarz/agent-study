@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .config import PROJECT, get_config
 from .corpus import Corpus
 from .graph import EvidenceGraph
-from .library import JobService, Library
+from .library import ConversationBusyError, JobService, Library
 from .scan import scan_plan
 from .logging_utils import Observability
 from .local_models import LocalModelManager, MODEL_KEY
@@ -212,6 +212,16 @@ def create_app(directory: Path | str = PROJECT / "data" / "default", *, config_p
     @app.patch("/api/conversations/{conversation_id}")
     def rename_conversation(conversation_id: str, body: ConversationUpdate):
         return library.rename_conversation(conversation_id, body.title)
+
+    @app.delete("/api/conversations/{conversation_id}")
+    def delete_conversation(conversation_id: str, request: Request):
+        jobs = request.app.state.jobs
+        # 与提交和任务收尾共用锁，防止删除正在使用的任务记录。
+        with jobs.submit_lock:
+            try:
+                return library.delete_conversation(conversation_id, active_job_ids=jobs.scheduled)
+            except ConversationBusyError as exc:
+                raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/books/{book_id}/chapters")
     def chapters(book_id: str):

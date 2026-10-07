@@ -153,8 +153,10 @@ function watchJob(id) {
   if (state.watched.has(id)) return;
   state.watched.add(id);
   const poll = async () => {
+    if (!state.watched.has(id)) return;
     try {
       const job = await api('/api/jobs/' + id);
+      if (!state.watched.has(id)) return;
       if (['completed', 'failed', 'interrupted', 'retried', 'paused'].includes(job.status)) {
         state.watched.delete(id);
         toast(job.status === 'completed' ? kindLabels[job.kind] + '已完成' : job.status === 'retried' ? job.progress : job.error || job.progress, ['failed', 'interrupted'].includes(job.status));
@@ -169,6 +171,7 @@ function watchJob(id) {
       if (progress) progress.textContent = job.progress;
       setTimeout(poll, 2000);
     } catch (error) {
+      if (!state.watched.has(id)) return;
       state.watched.delete(id);
       toast('任务状态暂时不可用，请到后台任务查看。', true);
     }
@@ -296,13 +299,32 @@ async function renderChat(book, body, version, requestedConversation) {
     try {await api('/api/conversations/' + conversationId, jsonRequest('PATCH', {title: title.trim()})); route();}
     catch (error) {toast(error.message, true);}
   };
+  const deleteConversation = async (item, control) => {
+    if (!confirm('删除会话“' + item.title + '”及其中的全部问答记录？删除后无法恢复。')) return;
+    control.disabled = true;
+    try {
+      const result = await api('/api/conversations/' + item.id, {method: 'DELETE'});
+      // 清理当前页面的草稿和轮询；删除最后一个会话后保持可直接提问的空页面。
+      delete state.drafts[book.id + '/' + item.id];
+      for (const id of result.deleted_job_ids) state.watched.delete(id);
+      if (state.conversations[book.id] === item.id) delete state.conversations[book.id];
+      if (location.hash === '#book/' + book.id + '/chat/' + item.id) {
+        history.replaceState(null, '', '#book/' + book.id + '/chat');
+      }
+      toast('会话已删除');
+      if (location.hash.startsWith('#book/' + book.id + '/chat')) route();
+      refreshActivity();
+    } catch (error) {toast(error.message, true); control.disabled = false;}
+  };
   const sessions = h('div', {class: 'side-card conversation-card'}, h('div', {class: 'conversation-heading'}, h('h3', {}, '会话'),
     button('＋ 新会话', newConversation, 'quiet', {disabled: Boolean(book.archived)})),
     h('p', {}, '会话只保存记录；每次问答独立，不携带历史消息。'),
-    h('div', {class: 'conversation-list'}, ...conversations.map(item => h('button', {
+    h('div', {class: 'conversation-list'}, ...conversations.map(item => h('div', {class: 'conversation-row'}, h('button', {
       class: 'conversation-item' + (item.id === conversationId ? ' active' : ''), title: item.title,
       'aria-current': item.id === conversationId ? 'true' : undefined,
-      onclick: () => {state.conversations[book.id] = item.id; location.hash = '#book/' + book.id + '/chat/' + item.id;}}, item.title))),
+      onclick: () => {state.conversations[book.id] = item.id; location.hash = '#book/' + book.id + '/chat/' + item.id;}}, item.title),
+      button('删除', event => deleteConversation(item, event.currentTarget), 'quiet danger', {
+        title: '删除此会话及问答记录', 'aria-label': '删除会话 ' + item.title})))),
     currentConversation ? button('重命名会话', renameConversation, 'quiet') : h('p', {class: 'muted'}, '发送问题后会自动创建会话。'));
   const sidebar = h('aside', {class: 'reader-aside'}, sessions, h('div', {class: 'side-card'}, h('h3', {}, '准备你的阅读'),
     h('p', {}, '语义索引用于寻找意思相近的原文；关系索引用于追踪跨章节人物与事件。'),

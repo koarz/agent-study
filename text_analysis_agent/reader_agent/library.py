@@ -30,6 +30,10 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+class ConversationBusyError(ValueError):
+    """会话仍有未结束的问答，暂时不能删除其任务记录。"""
+
+
 class Library:
     def __init__(self, directory: Path | str):
         self.directory = Path(directory).resolve()
@@ -175,11 +179,18 @@ class Library:
         conversation_id = None
         if kind == "ask" and book_id is not None:
             conversation_id = payload.get("conversation_id") or self.default_conversation(book_id)["id"]
-            self.conversation(conversation_id, book_id=book_id)
             payload["conversation_id"] = conversation_id
         job_id = uuid.uuid4().hex
         stamp = now()
         with self.connection() as db:
+            # 会话检查与任务写入使用同一事务，避免删除后又写入孤立问答。
+            db.execute("BEGIN IMMEDIATE")
+            if conversation_id is not None:
+                conversation = db.execute("SELECT book_id FROM conversations WHERE id=?", (conversation_id,)).fetchone()
+                if conversation is None:
+                    raise KeyError("会话不存在")
+                if conversation['book_id'] != book_id:
+                    raise ValueError("会话不属于当前书籍")
             db.execute("INSERT INTO jobs(id,book_id,kind,payload,status,progress,result,error,created_at,updated_at,conversation_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                        (job_id, book_id, kind, json.dumps(payload, ensure_ascii=False), "queued", "等待执行", None, None, stamp, stamp, conversation_id))
             if conversation_id is not None:
@@ -229,6 +240,20 @@ class Library:
         with self.connection() as db:
             db.execute("UPDATE conversations SET title=?,updated_at=? WHERE id=?", (title.strip(), now(), conversation_id))
         return self.conversation(conversation_id)
+
+    def delete_conversation(self, conversation_id, *, active_job_ids=()):
+        """原子删除会话及问答记录，保留书籍原文、索引和独立的用量统计。"""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if db.execute("SELECT id FROM conversations WHERE id=?", (conversation_id,)).fetchone() is None:
+                raise KeyError("会话不存在")
+            jobs = db.execute("SELECT id,status FROM jobs WHERE conversation_id=?", (conversation_id,)).fetchall()
+            if any(row['status'] in {'queued', 'running'} or row['id'] in active_job_ids for row in jobs):
+                raise ConversationBusyError("此会话还有问答正在执行或排队，请等任务结束后再删除")
+            db.execute("DELETE FROM jobs WHERE conversation_id=?", (conversation_id,))
+            db.execute("DELETE FROM conversations WHERE id=?", (conversation_id,))
+        return {'deleted': True, 'conversation_id': conversation_id,
+                'deleted_jobs': len(jobs), 'deleted_job_ids': [row['id'] for row in jobs]}
 
     @staticmethod
     def decode_job(row) -> dict:
