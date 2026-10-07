@@ -1,0 +1,21 @@
+{
+  "dataset": "合成中文文本，非真实小说或语义模型评测",
+  "chars": 10000000,
+  "chunks": 9645,
+  "import_seconds": 9.891,
+  "last_clue_query_seconds": 0.023,
+  "peak_rss_mb": 32.5,
+  "storage_mb": 196.21,
+  "last_clue_exactly_found": true,
+  "citation_end": 10000000,
+  "whole_source_loaded": false,
+  "scan_plan": {
+    "total_chunks": 9645,
+    "total_batches": 877,
+    "input_chars": 10000000,
+    "batch_chars": 12000,
+    "model_calls_min": 877,
+    "model_calls_max": 1754
+  },
+  "paid_model_calls": 0
+}

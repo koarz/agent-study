@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="以原文为依据的小说与文本阅读工作台">
+  <title>原文 · 阅读工作台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='11' fill='%23395143'/%3E%3Ctext x='20' y='28' text-anchor='middle' font-size='25' fill='white'%3E文%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/assets/styles.css?v=b7d150e270eb">
+  <script src="/assets/app.js?v=5958f518f7cd" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#library"><span class="brand-mark">文</span><span>原文<small>阅读与证据</small></span></a>
+    <div class="nav-label">工作台</div>
+    <nav aria-label="主导航">
+      <a href="#library" data-nav="library"><span class="nav-icon">▤</span>我的书库<span class="nav-count" id="book-count">0</span></a>
+      <a href="#tasks" data-nav="tasks"><span class="nav-icon">◷</span>后台任务<span class="activity-dot" id="task-dot" hidden></span></a>
+      <a href="#usage" data-nav="usage"><span class="nav-icon">▥</span>用量统计</a>
+      <a href="#settings" data-nav="settings"><span class="nav-icon">⚙</span>模型设置</a>
+    </nav>
+    <div class="sidebar-note"><span class="tiny-rule"></span><strong>先有原文，再有答案。</strong><p>保留出处，也保留不确定性。</p></div>
+    <div class="sidebar-footer"><span class="live-dot"></span>个人阅读工作台 <span>v1.0</span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="muted">我的工作台</span><span class="crumb">/</span><span id="breadcrumb">我的书库</span></div><span class="topbar-note"><span class="live-dot"></span>以原文为准</span></header>
+    <main id="content" aria-live="polite"><div class="page-loading">正在打开工作台…</div></main>
+    <footer class="page-footer">每一个结论，都应该能在原文里找到依据。</footer>
+  </div>
+  <dialog id="upload-dialog" class="modal">
+    <form id="upload-form">
+      <div class="modal-header"><div><span class="eyebrow">新增阅读内容</span><h2>导入一本书</h2></div><button type="button" class="icon-button" id="close-upload" aria-label="关闭">×</button></div>
+      <label class="drop-zone" id="drop-zone" for="file-input"><span class="upload-symbol">↑</span><strong id="file-label">点击选择，或将原文拖到这里</strong><span>TXT、Markdown · 最大 128 MB</span><input id="file-input" name="file" type="file" accept=".txt,.md,.markdown" required></label>
+      <label class="field">书名<input name="title" id="upload-title" maxlength="200" placeholder="默认使用文件名"></label>
+      <label class="field">文本编码<select name="encoding"><option value="utf-8-sig">UTF-8（推荐）</option><option value="gb18030">GBK / GB18030</option></select></label>
+      <p class="helper">原文保存在本机。问答和索引时，所需文本会发送到你配置的模型服务。</p>
+      <p id="upload-error" class="form-error" role="alert"></p>
+      <div class="modal-actions"><button type="button" class="button secondary" id="cancel-upload">取消</button><button class="button primary" id="upload-submit" type="submit">导入原文 <span>↗</span></button></div>
+    </form>
+  </dialog>
+  <dialog id="quote-dialog" class="modal quote-modal"><div class="modal-header"><div><span class="eyebrow">原文上下文</span><h2 id="quote-title"></h2></div><button id="close-quote" class="icon-button" aria-label="关闭">×</button></div><div id="quote-content"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
